@@ -4,7 +4,7 @@
   "description": "三语翻译官 - 中西英翻译机器人",
   "type": "module",
   "scripts": {
-    "start": "node scripts/translator-server.js",
+    "start": "node scripts/translator-server-auto.js",
     "dev": "node scripts/translator-server.js 3000",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
