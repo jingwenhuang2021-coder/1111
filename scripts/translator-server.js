@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
   res.end('Not Found');
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('🌍 三语翻译官 HTTP 服务器已启动');
   console.log('═══════════════════════════════════════');
