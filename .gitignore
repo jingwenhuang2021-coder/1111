@@ -1,0 +1,26 @@
+# 临时文件和构建产物
+.tmp/
+*.log
+
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

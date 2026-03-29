@@ -1,0 +1,25 @@
+{
+  "name": "spanish-diplomat-bot",
+  "version": "1.0.0",
+  "description": "三语翻译官 - 中西英翻译机器人",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/translator-server.js",
+    "dev": "node scripts/translator-server.js 3000",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "feishu",
+    "bot",
+    "spanish",
+    "translator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.14.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
