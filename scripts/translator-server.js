@@ -1,54 +1,32 @@
 #!/usr/bin/env node
-// 用途：三语翻译官 HTTP 服务器 - 接收飞书消息，触发人机协作流程
-// 参数：$1=端口（默认 3000）
+// 用途：三语翻译官 HTTP 服务器 - 接收飞书消息
 
 import http from 'http';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
-const PORT = process.env.PORT || process.argv[2] || 3000;
+const PORT = process.env.PORT || 3000;
 
-// 简单的消息去重
+console.log('Starting server...');
+console.log('PORT:', PORT);
+
 const processedMessages = new Set();
-const MAX_CACHE = 100;
-
-function addProcessed(id) {
-  if (processedMessages.size >= MAX_CACHE) {
-    const first = processedMessages.values().next().value;
-    processedMessages.delete(first);
-  }
-  processedMessages.add(id);
-}
 
 function parseBody(req) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try { resolve(JSON.parse(body)); } 
       catch (e) { resolve({}); }
     });
-    req.on('error', reject);
-  });
-}
-
-// 处理消息（调用 translator-bot-hybrid.js）
-async function processMessage(userInput) {
-  return new Promise((resolve, reject) => {
-    const botPath = path.join(process.cwd(), 'scripts', 'translator-bot-hybrid.js');
-    const child = spawn('node', [botPath, userInput], {
-      env: process.env,
-      stdio: 'inherit'  // 直接输出到当前终端
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error('Bot failed'));
-    });
+    req.on('error', () => resolve({}));
   });
 }
 
 const server = http.createServer(async (req, res) => {
+  console.log(`${req.method} ${req.url}`);
+  
   res.setHeader('Access-Control-Allow-Origin', '*');
   
   if (req.method === 'OPTIONS') {
@@ -57,62 +35,66 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const url = new URL(req.url, `http://localhost:${PORT}`);
-
-  // 健康检查
-  if (url.pathname === '/health') {
+  // 根路径 - 健康检查
+  if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    res.end(JSON.stringify({ 
+      status: 'ok', 
+      service: 'translator-bot',
+      timestamp: new Date().toISOString() 
+    }));
     return;
   }
 
-  // 飞书事件回调
-  if (url.pathname === '/feishu/webhook') {
+  // 飞书 webhook
+  if (req.url === '/feishu/webhook') {
     const body = await parseBody(req);
 
-    // URL 验证
     if (body.challenge) {
-      console.log('🔔 飞书 URL 验证');
+      console.log('Challenge received:', body.challenge);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ challenge: body.challenge }));
       return;
     }
 
-    // 处理消息
     if (body.event?.message) {
       const msg = body.event.message;
       
-      // 去重
       if (processedMessages.has(msg.message_id)) {
         res.writeHead(200);
         res.end('{"status":"duplicate"}');
         return;
       }
-      addProcessed(msg.message_id);
+      processedMessages.add(msg.message_id);
 
       if (msg.message_type === 'text') {
         try {
           const content = JSON.parse(msg.content);
           const text = content.text?.trim() || '';
-          
-          // 去掉 @机器人的部分
           const cleanText = text.replace(/@_user_\d+/g, '').trim();
           
           if (cleanText) {
             console.log('');
             console.log('═══════════════════════════════════════');
-            console.log(`📩 新消息: ${cleanText.slice(0, 50)}...`);
+            console.log(`📩 新消息: ${cleanText}`);
             console.log('═══════════════════════════════════════');
             
-            // 异步处理（不阻塞响应）
-            processMessage(cleanText).catch(console.error);
+            // 调用翻译脚本
+            const botPath = path.join(process.cwd(), 'scripts', 'translator-bot-hybrid.js');
+            const child = spawn('node', [botPath, cleanText], {
+              env: process.env,
+              stdio: 'inherit'
+            });
+            
+            child.on('error', (err) => {
+              console.error('Spawn error:', err);
+            });
           }
         } catch (e) {
-          console.error('解析消息失败:', e.message);
+          console.error('Parse error:', e.message);
         }
       }
 
-      // 立即响应飞书
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok' }));
       return;
@@ -131,19 +113,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('🌍 三语翻译官 HTTP 服务器已启动');
   console.log('═══════════════════════════════════════');
-  console.log(`本地地址: http://localhost:${PORT}`);
-  console.log(`飞书回调: http://localhost:${PORT}/feishu/webhook`);
+  console.log(`Port: ${PORT}`);
+  console.log(`Health: http://0.0.0.0:${PORT}/health`);
+  console.log(`Webhook: http://0.0.0.0:${PORT}/feishu/webhook`);
   console.log('═══════════════════════════════════════');
-  console.log('');
-  console.log('💡 使用流程：');
-  console.log('1. 配置 ngrok: npx ngrok http ' + PORT);
-  console.log('2. 将 https URL 配置到飞书事件订阅');
-  console.log('3. @机器人发送消息');
-  console.log('4. 按终端提示操作（复制给 Kimi → 推送）');
-  console.log('');
 });
 
-process.on('SIGINT', () => {
-  console.log('\n\n👋 服务器已关闭');
-  server.close(() => process.exit(0));
+server.on('error', (err) => {
+  console.error('Server error:', err);
 });
